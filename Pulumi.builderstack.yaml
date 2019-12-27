@@ -1,0 +1,9 @@
+config:
+  aws:profile: default
+  aws:region: us-east-1
+  tags:version: "0.1.0"
+  tags:author: retgits
+  tags:team: vcs
+  tags:feature: myFirstVPCWithPulumi
+  vpc:name: myPulumiVPC
+  vpc:cidr-block: "172.32.0.0/16"
