@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/ec2"
+	"github.com/pulumi/pulumi-aws/sdk/go/aws/eks"
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
 )
 
@@ -63,6 +64,27 @@ func main() {
 		}
 
 		ctx.Export("SUBNET-IDS", subnets["subnet_ids"])
+
+		// Create an EKS cluster
+		clusterName := getEnv(ctx, "eks:cluster-name", "unknown")
+		enabledClusterLogTypes := strings.Split(getEnv(ctx, "eks:cluster-log-types", "unknown"), ",")
+
+		clusterArgs := &eks.ClusterArgs{
+			Name:                   clusterName,
+			Version:                getEnv(ctx, "eks:k8s-version", "unknown"),
+			RoleArn:                getEnv(ctx, "eks:cluster-role-arn", "unknown"),
+			Tags:                   tags,
+			VpcConfig:              subnets,
+			EnabledClusterLogTypes: enabledClusterLogTypes,
+		}
+
+		cluster, err := eks.NewCluster(ctx, clusterName, clusterArgs)
+		if err != nil {
+			fmt.Println(err.Error())
+			return err
+		}
+
+		ctx.Export("CLUSTER-ID", cluster.ID())
 
 		return nil
 	})

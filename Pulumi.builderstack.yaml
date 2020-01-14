@@ -9,3 +9,7 @@ config:
   vpc:cidr-block: "172.32.0.0/16"
   vpc:subnet-zones: "us-east-1a,us-east-1c"
   vpc:subnet-ips: "172.32.32.0/20,172.32.80.0/20"
+  eks:cluster-name: myEKSCluster
+  eks:k8s-version: "1.14"
+  eks:cluster-role-arn: "arn:aws:iam::ACCOUNTID:role/ServiceRoleForAmazonEKS"
+  eks:cluster-log-types: "api,audit,authenticator,scheduler,controllerManager"
