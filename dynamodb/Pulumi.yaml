@@ -1,0 +1,3 @@
+name: stack
+runtime: go
+description: An awesome Pulumi infrastructure-as-code Stack
