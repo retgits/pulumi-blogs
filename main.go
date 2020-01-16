@@ -86,6 +86,31 @@ func main() {
 
 		ctx.Export("CLUSTER-ID", cluster.ID())
 
+		// Create an EKS Fargate Profile
+		fargateProfileName := getEnv(ctx, "fargate:profile-name", "unknown")
+
+		selectors := make([]map[string]interface{}, 1)
+		namespaces := make(map[string]interface{})
+		namespaces["namespace"] = getEnv(ctx, "fargate:namespace", "unknown")
+		selectors[0] = namespaces
+
+		fargateProfileArgs := &eks.FargateProfileArgs{
+			ClusterName:         clusterName,
+			FargateProfileName:  fargateProfileName,
+			Tags:                tags,
+			SubnetIds:           subnets["subnet_ids"],
+			Selectors:           selectors,
+			PodExecutionRoleArn: getEnv(ctx, "fargate:execution-role-arn", "unknown"),
+		}
+
+		fargateProfile, err := eks.NewFargateProfile(ctx, fargateProfileName, fargateProfileArgs)
+		if err != nil {
+			fmt.Println(err.Error())
+			return err
+		}
+
+		ctx.Export("FARGATE-PROFILE-ID", fargateProfile.ID())
+
 		return nil
 	})
 }

@@ -13,3 +13,6 @@ config:
   eks:k8s-version: "1.14"
   eks:cluster-role-arn: "arn:aws:iam::ACCOUNTID:role/ServiceRoleForAmazonEKS"
   eks:cluster-log-types: "api,audit,authenticator,scheduler,controllerManager"
+  fargate:profile-name: EKSFargateProfile
+  fargate:namespace: example
+  fargate:execution-role-arn: "arn:aws:iam::ACCOUNTID:role/EKSFargatePodExecutionRole"
