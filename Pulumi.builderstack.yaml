@@ -1,18 +1,32 @@
 config:
   aws:profile: default
-  aws:region: us-east-1
-  tags:version: "0.1.0"
-  tags:author: retgits
-  tags:team: vcs
-  tags:feature: myFirstVPCWithPulumi
-  vpc:name: myPulumiVPC
-  vpc:cidr-block: "172.32.0.0/16"
-  vpc:subnet-zones: "us-east-1a,us-east-1c"
-  vpc:subnet-ips: "172.32.32.0/20,172.32.80.0/20"
-  eks:cluster-name: myEKSCluster
-  eks:k8s-version: "1.14"
-  eks:cluster-role-arn: "arn:aws:iam::ACCOUNTID:role/ServiceRoleForAmazonEKS"
-  eks:cluster-log-types: "api,audit,authenticator,scheduler,controllerManager"
-  fargate:profile-name: EKSFargateProfile
-  fargate:namespace: example
-  fargate:execution-role-arn: "arn:aws:iam::ACCOUNTID:role/EKSFargatePodExecutionRole"
+  aws:region: us-west-2
+  awsconfig:eks:
+    cluster-log-types:
+      - api
+      - audit
+      - authenticator
+      - scheduler
+      - controllerManager
+    cluster-name: myEKSCluster
+    cluster-role-arn: arn:aws:iam::ACCOUNTID:role/ServiceRoleForAmazonEKS
+    k8s-version: "1.14"
+  awsconfig:fargate:
+    execution-role-arn: arn:aws:iam::ACCOUNTID:role/EKSFargatePodExecutionRole
+    namespace: example
+    profile-name: EKSFargateProfile
+  awsconfig:tags:
+    author: retgits
+    feature: myFirstVPCWithPulumi
+    team: vcs
+    version: 0.1.0
+    stage: dev
+  awsconfig:vpc:
+    cidr-block: 172.32.0.0/16
+    name: myPulumiVPC
+    subnet-ips: 
+      - 172.32.32.0/20
+      - 172.32.80.0/20
+    subnet-zones: 
+      - us-east-1a
+      - us-east-1c

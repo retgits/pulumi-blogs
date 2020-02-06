@@ -43,19 +43,19 @@ func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 		// The policy description of the IAM role, in this case only the sts:AssumeRole is needed
 		roleArgs := &iam.RoleArgs{
-			AssumeRolePolicy: `{
-        "Version": "2012-10-17",
-        "Statement": [
-        {
-            "Action": "sts:AssumeRole",
-            "Principal": {
-                "Service": "lambda.amazonaws.com"
-            },
-            "Effect": "Allow",
-            "Sid": ""
-        }
-        ]
-    }`,
+			AssumeRolePolicy: pulumi.String(`{
+				"Version": "2012-10-17",
+				"Statement": [
+				{
+					"Action": "sts:AssumeRole",
+					"Principal": {
+						"Service": "lambda.amazonaws.com"
+					},
+					"Effect": "Allow",
+					"Sid": ""
+				}
+				]
+			}`),
 		}
 
 		// Create a new role called HelloWorldIAMRole
@@ -66,25 +66,27 @@ func main() {
 		}
 
 		// Export the role ARN as an output of the Pulumi stack
-		ctx.Export("Role ARN", role.Arn())
+		ctx.Export("Role ARN", role.Arn)
 
-		environment := make(map[string]interface{})
-		variables := make(map[string]interface{})
-		variables["NAME"] = "WORLD"
-		environment["variables"] = variables
+		variables := make(map[string]pulumi.StringInput)
+		variables["NAME"] = pulumi.String("WORLD")
+
+		environment := lambda.FunctionEnvironmentArgs{
+			Variables: pulumi.StringMap(variables),
+		}
 
 		// The set of arguments for constructing a Function resource.
 		functionArgs := &lambda.FunctionArgs{
-			Description: "My Lambda function",
-			Runtime:     "go1.x",
-			Name:        "HelloWorldFunction",
-			MemorySize:  256,
-			Timeout:     10,
-			Handler:     "hello-world",
+			Description: pulumi.String("My Lambda function"),
+			Runtime:     pulumi.String("go1.x"),
+			Name:        pulumi.String("HelloWorldFunction"),
+			MemorySize:  pulumi.Int(256),
+			Timeout:     pulumi.Int(10),
+			Handler:     pulumi.String("hello-world"),
 			Environment: environment,
-			S3Bucket:    "us-west-2-retgits-lambda-apps",
-			S3Key:       "hello-world.zip",
-			Role:        role.Arn(),
+			S3Bucket:    pulumi.String("us-west-2-retgits-lambda-apps"),
+			S3Key:       pulumi.String("hello-world.zip"),
+			Role:        role.Arn,
 		}
 
 		// NewFunction registers a new resource with the given unique name, arguments, and options.
@@ -95,7 +97,7 @@ func main() {
 		}
 
 		// Export the function ARN as an output of the Pulumi stack
-		ctx.Export("Function", function.Arn())
+		ctx.Export("Function", function.Arn)
 
 		return nil
 	})

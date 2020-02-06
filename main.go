@@ -2,37 +2,71 @@ package main
 
 import (
 	"fmt"
-	"strings"
+	"log"
 
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/go/aws/eks"
 	"github.com/pulumi/pulumi/sdk/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/go/pulumi/config"
 )
+
+type EKSConfig struct {
+	ClusterLogTypes   []string `json:"cluster-log-types"`
+	ClusterName       string   `json:"cluster-name"`
+	ClusterRoleARN    string   `json:"cluster-role-arn"`
+	KubernetesVersion string   `json:"k8s-version"`
+}
+
+type FargateConfig struct {
+	ExecutionRoleARN string `json:"execution-role-arn"`
+	Namespace        string `json:"namespace"`
+	ProfileName      string `json:"profile-name"`
+}
+
+type Tags struct {
+	Author  string
+	Feature string
+	Team    string
+	Version string
+	Stage   string
+}
+
+type VPCConfig struct {
+	CIDRBlock   string `json:"cidr-block"`
+	Name        string
+	SubnetIPs   []string `json:"subnet-ips"`
+	SubnetZones []string `json:"subnet-zones"`
+}
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
+		// Create a new config object with the data from the YAML file
+		// The object has all the data that the namespace awsconfig has
+		conf := config.New(ctx, "awsconfig")
+
 		// Prepare the tags that are used for each individual resource so they can be found
 		// using the Resource Groups service in the AWS Console
-		tags := make(map[string]interface{})
-		tags["version"] = getEnv(ctx, "tags:version", "unknown")
-		tags["author"] = getEnv(ctx, "tags:author", "unknown")
-		tags["team"] = getEnv(ctx, "tags:team", "unknown")
-		tags["feature"] = getEnv(ctx, "tags:feature", "unknown")
-		tags["region"] = getEnv(ctx, "aws:region", "unknown")
+		var tags Tags
+		conf.RequireObject("tags", &tags)
+		tagMap := make(map[string]pulumi.Input)
+		tagMap["author"] = pulumi.String(tags.Author)
+		tagMap["team"] = pulumi.String(tags.Team)
+		tagMap["version"] = pulumi.String(tags.Version)
+		tagMap["feature"] = pulumi.String(tags.Feature)
+		tagMap["stage"] = pulumi.String(tags.Stage)
 
 		// Create a VPC for the EKS cluster
-		cidrBlock := getEnv(ctx, "vpc:cidr-block", "unknown")
+		var vpcConfig VPCConfig
+		conf.RequireObject("vpc", &vpcConfig)
 
 		vpcArgs := &ec2.VpcArgs{
-			CidrBlock: cidrBlock,
-			Tags:      tags,
+			CidrBlock: pulumi.String(vpcConfig.CIDRBlock),
+			Tags:      pulumi.Map(tagMap),
 		}
 
-		vpcName := getEnv(ctx, "vpc:name", "unknown")
-
-		vpc, err := ec2.NewVpc(ctx, vpcName, vpcArgs)
+		vpc, err := ec2.NewVpc(ctx, vpcConfig.Name, vpcArgs)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf("error creating VPC: %s", err.Error())
 			return err
 		}
 
@@ -40,70 +74,72 @@ func main() {
 		ctx.Export("VPC-ID", vpc.ID())
 
 		// Create the required number of subnets
-		subnets := make(map[string]interface{})
-		subnets["subnet_ids"] = make([]interface{}, 0)
-
-		subnetZones := strings.Split(getEnv(ctx, "vpc:subnet-zones", "unknown"), ",")
-		subnetIPs := strings.Split(getEnv(ctx, "vpc:subnet-ips", "unknown"), ",")
-
-		for idx, availabilityZone := range subnetZones {
+		subnets := make([]pulumi.StringInput, len(vpcConfig.SubnetZones))
+		for idx, availabilityZone := range vpcConfig.SubnetZones {
 			subnetArgs := &ec2.SubnetArgs{
-				Tags:             tags,
+				Tags:             pulumi.Map(tagMap),
 				VpcId:            vpc.ID(),
-				CidrBlock:        subnetIPs[idx],
-				AvailabilityZone: availabilityZone,
+				CidrBlock:        pulumi.String(vpcConfig.SubnetIPs[idx]),
+				AvailabilityZone: pulumi.String(availabilityZone),
 			}
 
-			subnet, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-subnet-%d", vpcName, idx), subnetArgs)
+			subnet, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-subnet-%d", vpcConfig.Name, idx), subnetArgs)
 			if err != nil {
 				fmt.Println(err.Error())
 				return err
 			}
 
-			subnets["subnet_ids"] = append(subnets["subnet_ids"].([]interface{}), subnet.ID())
+			subnets = append(subnets, subnet.ID())
 		}
-
-		ctx.Export("SUBNET-IDS", subnets["subnet_ids"])
 
 		// Create an EKS cluster
-		clusterName := getEnv(ctx, "eks:cluster-name", "unknown")
-		enabledClusterLogTypes := strings.Split(getEnv(ctx, "eks:cluster-log-types", "unknown"), ",")
+		var eksConfig EKSConfig
+		conf.RequireObject("eks", &eksConfig)
 
-		clusterArgs := &eks.ClusterArgs{
-			Name:                   clusterName,
-			Version:                getEnv(ctx, "eks:k8s-version", "unknown"),
-			RoleArn:                getEnv(ctx, "eks:cluster-role-arn", "unknown"),
-			Tags:                   tags,
-			VpcConfig:              subnets,
-			EnabledClusterLogTypes: enabledClusterLogTypes,
+		logTypes := make([]pulumi.StringInput, len(eksConfig.ClusterLogTypes))
+		for idx, val := range eksConfig.ClusterLogTypes {
+			logTypes[idx] = pulumi.String(val)
 		}
 
-		cluster, err := eks.NewCluster(ctx, clusterName, clusterArgs)
+		clusterArgs := &eks.ClusterArgs{
+			Name:    pulumi.String(eksConfig.ClusterName),
+			Version: pulumi.String(eksConfig.KubernetesVersion),
+			RoleArn: pulumi.String(eksConfig.ClusterRoleARN),
+			Tags:    pulumi.Map(tagMap),
+			VpcConfig: eks.ClusterVpcConfigArgs{
+				VpcId:     vpc.ID(),
+				SubnetIds: pulumi.StringArray(subnets),
+			},
+			EnabledClusterLogTypes: pulumi.StringArray(logTypes),
+		}
+
+		cluster, err := eks.NewCluster(ctx, eksConfig.ClusterName, clusterArgs)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf("error creating EKS cluster: %s", err.Error())
 			return err
 		}
 
 		ctx.Export("CLUSTER-ID", cluster.ID())
 
 		// Create an EKS Fargate Profile
-		fargateProfileName := getEnv(ctx, "fargate:profile-name", "unknown")
+		var fargateConfig FargateConfig
+		conf.RequireObject("fargate", &fargateConfig)
 
-		selectors := make([]map[string]interface{}, 1)
-		namespaces := make(map[string]interface{})
-		namespaces["namespace"] = getEnv(ctx, "fargate:namespace", "unknown")
-		selectors[0] = namespaces
-
-		fargateProfileArgs := &eks.FargateProfileArgs{
-			ClusterName:         clusterName,
-			FargateProfileName:  fargateProfileName,
-			Tags:                tags,
-			SubnetIds:           subnets["subnet_ids"],
-			Selectors:           selectors,
-			PodExecutionRoleArn: getEnv(ctx, "fargate:execution-role-arn", "unknown"),
+		selectors := make([]eks.FargateProfileSelectorInput, 1)
+		selectors[0] = eks.FargateProfileSelectorArgs{
+			Namespace: pulumi.String(fargateConfig.Namespace),
 		}
 
-		fargateProfile, err := eks.NewFargateProfile(ctx, fargateProfileName, fargateProfileArgs)
+		fargateProfileArgs := &eks.FargateProfileArgs{
+			ClusterName:         pulumi.String(eksConfig.ClusterName),
+			FargateProfileName:  pulumi.String(fargateConfig.ProfileName),
+			Tags:                pulumi.Map(tagMap),
+			SubnetIds:           pulumi.StringArray(subnets),
+			Selectors:           eks.FargateProfileSelectorArray(selectors),
+			PodExecutionRoleArn: pulumi.String(fargateConfig.ExecutionRoleARN),
+		}
+
+		fargateProfile, err := eks.NewFargateProfile(ctx, fargateConfig.ProfileName, fargateProfileArgs)
 		if err != nil {
 			fmt.Println(err.Error())
 			return err
@@ -113,12 +149,4 @@ func main() {
 
 		return nil
 	})
-}
-
-// getEnv searches for the requested key in the pulumi context and provides either the value of the key or the fallback.
-func getEnv(ctx *pulumi.Context, key string, fallback string) string {
-	if value, ok := ctx.GetConfig(key); ok {
-		return value
-	}
-	return fallback
 }
